@@ -74,6 +74,10 @@ fn handle_client_message(stream: TcpStream, root: &str) {
     let mut reader = BufReader::new(stream.try_clone().expect("Failed to clone stream"));
     let mut writer = BufWriter::new(stream);
 
+    let flush = {
+        writer.flush().expect("Failed to flush writer");
+    };
+
     loop {
         // 提取有效命令段
         let mut line = String::new();
@@ -90,15 +94,15 @@ fn handle_client_message(stream: TcpStream, root: &str) {
         match cmd {
             "quit" => {
                 writeln!(writer, "Bye nya~").expect("Failed to write response");
-                flush();
+                flush;
                 break;
             }
             "list" => {
                 let rel = parts.next().unwrap_or(".");
                 let target = join_paths(root, rel, false);
                 if !target.exists() || !target.is_dir() {
-                    writeln!(writer, "{} not a dir", target).expect("Failed to write response");
-                    flush();
+                    writeln!(writer, "{} not a dir", target.to_string_lossy()).expect("Failed to write response");
+                    flush;
                     continue;
                 }
                 writeln!(writer, "Here is the list nya:").expect("Failed to write response");
@@ -122,29 +126,29 @@ fn handle_client_message(stream: TcpStream, root: &str) {
                         writeln!(writer, "ERR read dir failed").expect("Failed to write response");
                     }
                 }
-                flush();
+                flush;
             }
             "get" => {
                 let rel = parts.next().unwrap_or("");
                 let path = join_paths(root, rel, false);
                 if !path.exists() || !path.is_file() {
-                    writeln!(writer, "no such file called {}", path).expect("Failed to write response");
-                    flush();
+                    writeln!(writer, "no such file called {}", path.to_string_lossy()).expect("Failed to write response");
+                    flush;
                     continue;
                 }
                 if let Ok(mut f) = File::open(&path) {
                     if let Ok(size) = f.metadata().map(|m| m.len()) {
                         writeln!(writer, "Get successful nya~").expect("Failed to write response");
-                        flush();
+                        flush;
                         copy(&mut f, &mut writer).expect("Failed to send file");
-                        flush();
+                        flush;
                     } else {
                         writeln!(writer, "ERR file error").expect("Failed to write response");
-                        flush();
+                        flush;
                     }
                 } else {
                     writeln!(writer, "ERR file error").expect("Failed to write response");
-                    flush();
+                    flush;
                 }
             }
             "put" => {
@@ -153,7 +157,7 @@ fn handle_client_message(stream: TcpStream, root: &str) {
                 let size: u64 = size_part.parse().unwrap_or(0);
                 if size == 0 {
                     writeln!(writer, "ERR bad size").expect("Failed to write response");
-                    flush();
+                    flush;
                     continue;
                 }
                 let path = join_paths(root, rel, false);
@@ -164,10 +168,10 @@ fn handle_client_message(stream: TcpStream, root: &str) {
                     let mut limited = reader.by_ref().take(size);
                     io::copy(&mut limited, &mut f).expect("Failed to write file");
                     writeln!(writer, "Update successful nya~").expect("Failed to write response");
-                    flush();
+                    flush;
                 } else {
                     writeln!(writer, "ERR file error").ok();
-                    flush();
+                    flush;
                 }
             }
             "help" => {
@@ -178,11 +182,11 @@ Commands:\n\
   put path size - Put file content (size in bytes)\n\
   quit - Exit the server\n\
                         ").ok();
-                flush();
+                flush;
             }
             _ => {
                 writeln!(writer, "ERR unknown cmd").expect("Failed to write response");
-                flush();
+                flush;
             }
         }
         // 服务端日志
@@ -203,8 +207,4 @@ fn join_paths(base: &str, rel: &str, _for_create: bool) -> PathBuf {
         }
     }
     p
-}
-
-fn flush() {
-    writer.flush().expect("Failed to flush writer");
 }
